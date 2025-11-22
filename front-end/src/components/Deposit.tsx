@@ -4,7 +4,7 @@ import { parseUnits, formatUnits } from 'viem';
 import { arbitrum } from 'wagmi/chains';
 import { USDC_ADDRESS, USDC_ABI, KALSHI_DEPOSIT_ADDRESS, BALANCE_VAULT_ADDRESS, BALANCE_VAULT_ABI } from '../config/contracts';
 
-export function Deposit() {
+export function DepositModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { address, isConnected } = useAccount();
   const [amount, setAmount] = useState('');
   const { writeContract, isPending, isSuccess, error } = useWriteContract();
@@ -73,72 +73,130 @@ export function Deposit() {
     }
   };
 
-  if (!isConnected) {
-    return (
-      <div style={styles.card}>
-        <h2>Deposit</h2>
-        <p>Please connect your wallet to deposit</p>
-      </div>
-    );
-  }
+  if (!isOpen) return null;
 
   return (
-    <div style={styles.card}>
-      <h2>Deposit USDC</h2>
-
-      <div style={styles.balances}>
-        <div>
-          <p style={styles.label}>Wallet USDC Balance:</p>
-          <p style={styles.value}>
-            {usdcBalance ? formatUnits(usdcBalance as bigint, 6) : '0.00'} USDC
-          </p>
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.header}>
+          <h2 style={styles.title}>Deposit USDC</h2>
+          <button onClick={onClose} style={styles.closeButton}>×</button>
         </div>
-        <div>
-          <p style={styles.label}>Platform Balance:</p>
-          <p style={styles.value}>
-            {vaultBalance ? formatUnits(vaultBalance as bigint, 6) : '0.00'} USDC
-          </p>
-        </div>
+
+        {!isConnected ? (
+          <p style={styles.connectMessage}>Please connect your wallet to deposit</p>
+        ) : (
+          <>
+            <div style={styles.balances}>
+              <div>
+                <p style={styles.label}>Wallet USDC Balance:</p>
+                <p style={styles.value}>
+                  {usdcBalance ? formatUnits(usdcBalance as bigint, 6) : '0.00'} USDC
+                </p>
+              </div>
+              <div>
+                <p style={styles.label}>Platform Balance:</p>
+                <p style={styles.value}>
+                  {vaultBalance ? formatUnits(vaultBalance as bigint, 6) : '0.00'} USDC
+                </p>
+              </div>
+            </div>
+
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Amount (USDC)</label>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                style={styles.input}
+                step="0.01"
+                min="0"
+              />
+            </div>
+
+            <button
+              onClick={handleDeposit}
+              disabled={!amount || isPending}
+              style={{
+                ...styles.button,
+                ...((!amount || isPending) && styles.buttonDisabled)
+              }}
+            >
+              {isPending ? 'Depositing...' : 'Deposit to Kalshi'}
+            </button>
+
+            {isSuccess && (
+              <p style={styles.success}>
+                ✓ Deposit successful! Your balance will update shortly.
+              </p>
+            )}
+
+            <p style={styles.note}>
+              Note: Funds are sent directly to Kalshi. Your on-chain balance will be credited once confirmed.
+            </p>
+          </>
+        )}
       </div>
-
-      <div style={styles.inputGroup}>
-        <label style={styles.label}>Amount (USDC)</label>
-        <input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="0.00"
-          style={styles.input}
-          step="0.01"
-          min="0"
-        />
-      </div>
-
-      <button
-        onClick={handleDeposit}
-        disabled={!amount || isPending}
-        style={{
-          ...styles.button,
-          ...((!amount || isPending) && styles.buttonDisabled)
-        }}
-      >
-        {isPending ? 'Depositing...' : 'Deposit to Kalshi'}
-      </button>
-
-      {isSuccess && (
-        <p style={styles.success}>
-          ✓ Deposit successful! Your balance will update shortly.
-        </p>
-      )}
-
-      <p style={styles.note}>
-        Note: Funds are sent directly to Kalshi. Your on-chain balance will be credited once confirmed.
-      </p>
     </div>
   );
 }
 
+
 const styles = {
+  overlay: {
+    position: 'fixed' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.8)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  modal: {
+    background: '#13141a',
+    padding: '2rem',
+    borderRadius: '16px',
+    border: '1px solid #1c1f26',
+    maxWidth: '480px',
+    width: '90%',
+    maxHeight: '90vh',
+    overflow: 'auto',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '1.5rem',
+  },
+  title: {
+    fontSize: '1.5rem',
+    fontWeight: '700',
+    color: '#fff',
+    margin: 0,
+  },
+  closeButton: {
+    background: 'transparent',
+    border: 'none',
+    color: '#9ca3af',
+    fontSize: '2rem',
+    cursor: 'pointer',
+    padding: '0',
+    lineHeight: '1',
+    width: '32px',
+    height: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  connectMessage: {
+    color: '#9ca3af',
+    textAlign: 'center' as const,
+    padding: '2rem 0',
+  },
   card: {
     background: '#13141a',
     padding: '2rem',
@@ -184,7 +242,7 @@ const styles = {
     padding: '1rem',
     fontSize: '1rem',
     fontWeight: '600',
-    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+    background: 'linear-gradient(135deg, #E57373 0%, #D97373 100%)',
     color: '#fff',
     border: 'none',
     borderRadius: '12px',

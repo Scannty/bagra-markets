@@ -149,7 +149,7 @@ const styles = {
   switchButton: {
     padding: '0.625rem 1rem',
     fontSize: '0.8125rem',
-    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+    background: 'linear-gradient(135deg, #E57373 0%, #D97373 100%)',
     color: '#fff',
     border: 'none',
     borderRadius: '10px',
@@ -161,7 +161,7 @@ const styles = {
     padding: '0.625rem 1.25rem',
     fontSize: '0.9375rem',
     fontWeight: '600',
-    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+    background: 'linear-gradient(135deg, #E57373 0%, #D97373 100%)',
     color: '#fff',
     border: 'none',
     borderRadius: '10px',
