@@ -67,6 +67,54 @@ export function initializeApiServer(service: KalshiService) {
     }
   });
 
+  // Get event endpoint
+  app.get('/api/events/:eventTicker', async (req, res) => {
+    try {
+      const { eventTicker } = req.params;
+      const event = await kalshiService.getEvent(eventTicker);
+
+      if (!event) {
+        return res.status(404).json({ error: 'Event not found' });
+      }
+
+      res.json({ event });
+    } catch (error) {
+      console.error('Error fetching event:', error);
+      res.status(500).json({ error: 'Failed to fetch event' });
+    }
+  });
+
+  // Get event candlesticks for charting multiple markets
+  app.get('/api/events/:eventTicker/candlesticks', async (req, res) => {
+    try {
+      const { eventTicker } = req.params;
+      const { start_ts, end_ts, period_interval } = req.query;
+
+      // Set defaults: last 30 days, hourly candles
+      const now = Math.floor(Date.now() / 1000);
+      const monthAgo = now - (30 * 24 * 60 * 60);
+
+      const startTs = start_ts ? Number(start_ts) : monthAgo;
+      const endTs = end_ts ? Number(end_ts) : now;
+      const periodInterval = period_interval ? Number(period_interval) : 60; // 1 hour
+
+      console.log('Fetching event candlesticks for:', eventTicker);
+      console.log('Query params:', { startTs, endTs, periodInterval });
+
+      const events = await kalshiService.getEventCandlesticks(eventTicker, {
+        startTs,
+        endTs,
+        periodInterval,
+      });
+
+      res.json({ events });
+    } catch (error: any) {
+      console.error('Error fetching event candlesticks:', error);
+      console.error('Error response:', error.response?.data);
+      res.status(500).json({ error: 'Failed to fetch event candlesticks' });
+    }
+  });
+
   // Get market candlesticks for charting
   app.get('/api/markets/:ticker/candlesticks', async (req, res) => {
     try {
@@ -75,9 +123,9 @@ export function initializeApiServer(service: KalshiService) {
 
       // Set defaults: last 7 days, hourly candles
       const now = Math.floor(Date.now() / 1000);
-      const sevenDaysAgo = now - (7 * 24 * 60 * 60);
+      const monthAgo = now - (30 * 24 * 60 * 60);
 
-      const startTs = start_ts ? Number(start_ts) : sevenDaysAgo;
+      const startTs = start_ts ? Number(start_ts) : monthAgo
       const endTs = end_ts ? Number(end_ts) : now;
       const periodInterval = period_interval ? Number(period_interval) : 60; // 1 hour
 

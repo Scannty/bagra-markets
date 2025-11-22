@@ -1,10 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getMarkets, type Market } from '../services/kalshi';
+import { LoadingSpinner } from './LoadingSpinner';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+interface MarketEvent {
+  eventTicker: string;
+  eventTitle?: string;
+  markets: Market[];
+}
 
 export function Markets() {
   const navigate = useNavigate();
-  const [markets, setMarkets] = useState<Market[]>([]);
+  const [groupedEvents, setGroupedEvents] = useState<MarketEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -14,10 +23,55 @@ export function Markets() {
         setLoading(true);
         setError(null);
         const data = await getMarkets({
-          limit: 100,
+          limit: 1000,
           status: 'open',
         });
-        setMarkets(data);
+
+        // Group markets by event_ticker
+        const eventMap = new Map<string, Market[]>();
+        data.forEach(market => {
+          const eventTicker = market.eventTicker || market.ticker;
+          if (!eventMap.has(eventTicker)) {
+            eventMap.set(eventTicker, []);
+          }
+          eventMap.get(eventTicker)!.push(market);
+        });
+
+        // Convert to array and sort by total volume per event
+        const grouped = Array.from(eventMap.entries())
+          .map(([eventTicker, markets]) => ({
+            eventTicker,
+            markets,
+            totalVolume: markets.reduce((sum, m) => sum + m.volume, 0),
+          }))
+          .sort((a, b) => b.totalVolume - a.totalVolume);
+
+        // Fetch event titles for multi-market events
+        const groupedWithTitles = await Promise.all(
+          grouped.map(async (event) => {
+            if (event.markets.length > 1) {
+              try {
+                const response = await fetch(`${API_BASE}/events/${event.eventTicker}`);
+                if (response.ok) {
+                  const data = await response.json();
+                  return {
+                    eventTicker: event.eventTicker,
+                    eventTitle: data.event.title,
+                    markets: event.markets,
+                  };
+                }
+              } catch (err) {
+                console.error(`Failed to fetch event ${event.eventTicker}:`, err);
+              }
+            }
+            return {
+              eventTicker: event.eventTicker,
+              markets: event.markets,
+            };
+          })
+        );
+
+        setGroupedEvents(groupedWithTitles);
       } catch (err) {
         console.error('Failed to fetch markets:', err);
         setError('Failed to load markets. Please try again later.');
@@ -30,7 +84,7 @@ export function Markets() {
   }, []);
 
   if (loading) {
-    return <div style={styles.loading}>Loading markets...</div>;
+    return <LoadingSpinner size="large" />;
   }
 
   if (error) {
@@ -47,7 +101,7 @@ export function Markets() {
     );
   }
 
-  if (markets.length === 0) {
+  if (groupedEvents.length === 0) {
     return <div style={styles.loading}>No markets available at the moment.</div>;
   }
 
@@ -55,11 +109,17 @@ export function Markets() {
     <div style={styles.container}>
       <h2 style={styles.title}>Prediction Markets</h2>
       <div style={styles.grid}>
-        {markets.map((market) => (
-          <MarketCard
-            key={market.ticker}
-            market={market}
-            onClick={() => navigate(`/market/${market.ticker}`)}
+        {groupedEvents.map((event) => (
+          <EventCard
+            key={event.eventTicker}
+            event={event}
+            onClick={() => {
+              if (event.markets.length === 1) {
+                navigate(`/market/${event.markets[0].ticker}`);
+              } else {
+                navigate(`/event/${event.eventTicker}`);
+              }
+            }}
           />
         ))}
       </div>
@@ -67,36 +127,50 @@ export function Markets() {
   );
 }
 
-function MarketCard({ market, onClick }: { market: Market; onClick: () => void }) {
+function EventCard({ event, onClick }: { event: MarketEvent; onClick: () => void }) {
+  const totalVolume = event.markets.reduce((sum, m) => sum + m.volume, 0);
+
+  // For single market events, show the full title
+  const displayTitle = event.markets.length === 1 ? event.markets[0].title : (event.eventTitle || event.eventTicker);
+
   return (
     <div style={styles.card} onClick={onClick}>
       <div style={styles.cardHeader}>
-        <span style={styles.ticker}>{market.ticker}</span>
+        <span style={styles.ticker}>{event.eventTicker}</span>
         <span style={styles.volume}>
-          ${(market.volume / 1000).toFixed(0)}K vol
+          {totalVolume >= 1000000
+            ? `$${(totalVolume / 1000000).toFixed(1)}M vol`
+            : `$${(totalVolume / 1000).toFixed(0)}K vol`
+          }
         </span>
       </div>
 
-      <h3 style={styles.marketTitle}>{market.title}</h3>
+      <h3 style={styles.marketTitle}>{displayTitle}</h3>
 
-      <div style={styles.prices}>
-        <div style={styles.priceBox}>
-          <span style={styles.priceLabel}>YES</span>
-          <span style={{ ...styles.priceValue, color: '#10b981' }}>
-            {market.yesPrice}¢
-          </span>
+      {event.markets.length > 1 ? (
+        <div style={styles.multiMarketInfo}>
+          <span style={styles.marketCount}>{event.markets.length} markets in this event</span>
         </div>
-        <div style={styles.priceBox}>
-          <span style={styles.priceLabel}>NO</span>
-          <span style={{ ...styles.priceValue, color: '#ef4444' }}>
-            {market.noPrice}¢
-          </span>
+      ) : (
+        <div style={styles.prices}>
+          <div style={styles.priceBox}>
+            <span style={styles.priceLabel}>YES</span>
+            <span style={{ ...styles.priceValue, color: '#10b981' }}>
+              {event.markets[0].yesPrice}¢
+            </span>
+          </div>
+          <div style={styles.priceBox}>
+            <span style={styles.priceLabel}>NO</span>
+            <span style={{ ...styles.priceValue, color: '#ef4444' }}>
+              {event.markets[0].noPrice}¢
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       <div style={styles.cardFooter}>
         <span style={styles.closeTime}>
-          Closes: {new Date(market.closeTime).toLocaleDateString()}
+          Closes: {new Date(event.markets[0].closeTime).toLocaleDateString()}
         </span>
       </div>
     </div>
@@ -135,6 +209,21 @@ const styles = {
     fontSize: '1.5rem',
     marginBottom: '1.5rem',
     color: '#fff',
+    fontWeight: '600',
+  },
+  multiMarketInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '1.5rem',
+    background: '#0d0e12',
+    borderRadius: '10px',
+    border: '1px solid #1c1f26',
+    marginBottom: '1rem',
+  },
+  marketCount: {
+    fontSize: '0.9375rem',
+    color: '#9ca3af',
     fontWeight: '600',
   },
   grid: {

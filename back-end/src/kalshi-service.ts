@@ -1,4 +1,4 @@
-import { PortfolioApi, MarketsApi, Configuration } from 'kalshi-typescript';
+import { PortfolioApi, MarketsApi, EventsApi, Configuration } from 'kalshi-typescript';
 
 interface KalshiConfig {
   apiKey: string;
@@ -10,6 +10,7 @@ interface KalshiConfig {
 export class KalshiService {
   private portfolioApi: PortfolioApi;
   private marketsApi: MarketsApi;
+  private eventsApi: EventsApi;
   private config: Configuration;
 
   constructor(kalshiConfig: KalshiConfig) {
@@ -22,6 +23,7 @@ export class KalshiService {
 
     this.portfolioApi = new PortfolioApi(this.config);
     this.marketsApi = new MarketsApi(this.config);
+    this.eventsApi = new EventsApi(this.config);
   }
 
   /**
@@ -174,6 +176,14 @@ export class KalshiService {
   }
 
   /**
+   * Get event by ticker
+   */
+  async getEvent(eventTicker: string) {
+    const { data } = await this.eventsApi.getEvent(eventTicker, true); // with_nested_markets = true
+    return data.event;
+  }
+
+  /**
    * Get market orderbook
    */
   async getMarketOrderbook(ticker: string, depth?: number) {
@@ -217,5 +227,33 @@ export class KalshiService {
       params.periodInterval as any
     );
     return data.candlesticks;
+  }
+
+  /**
+   * Get event candlesticks for multiple markets
+   */
+  async getEventCandlesticks(eventTicker: string, params: {
+    startTs: number;
+    endTs: number;
+    periodInterval: number;
+  }) {
+    // Direct API call since SDK doesn't have this endpoint yet
+    const axios = require('axios');
+    const baseUrl = this.config.basePath || 'https://api.elections.kalshi.com/trade-api/v2';
+    const url = `${baseUrl}/events/candlesticks`;
+
+    const response = await axios.get(url, {
+      params: {
+        event_tickers: eventTicker,
+        start_ts: params.startTs,
+        end_ts: params.endTs,
+        period_interval: params.periodInterval,
+      },
+      headers: {
+        'Authorization': `Bearer ${this.config.apiKey}`,
+      },
+    });
+
+    return response.data.events;
   }
 }

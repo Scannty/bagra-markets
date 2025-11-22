@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { LoadingSpinner } from './LoadingSpinner';
 
 interface Position {
   ticker: string;
-  market_ticker: string;
-  event_ticker: string;
+  market_ticker?: string;
+  event_ticker?: string;
   position: number;
   total_traded: number;
-  yes_position?: number;
-  no_position?: number;
   realized_pnl?: number;
   resting_orders_count?: number;
   market_exposure?: number;
@@ -51,13 +50,29 @@ export function Portfolio() {
         await Promise.all(
           fetchedPositions.map(async (position: Position) => {
             try {
-              const ticker = position.market_ticker || position.ticker;
+              const ticker = position.ticker;
               const marketResponse = await fetch(`${API_BASE}/markets/${ticker}`);
               if (marketResponse.ok) {
                 const marketInfo = await marketResponse.json();
+                const eventTicker = marketInfo.market.event_ticker;
+
+                // Fetch event data to get the proper title
+                let title = marketInfo.market.title || ticker;
+                if (eventTicker) {
+                  try {
+                    const eventResponse = await fetch(`${API_BASE}/events/${eventTicker}`);
+                    if (eventResponse.ok) {
+                      const eventData = await eventResponse.json();
+                      title = eventData.event.title || title;
+                    }
+                  } catch (err) {
+                    console.error(`Failed to fetch event ${eventTicker}:`, err);
+                  }
+                }
+
                 dataMap.set(ticker, {
                   ticker: ticker,
-                  title: marketInfo.market.title || ticker,
+                  title: title,
                   yes_bid: marketInfo.market.yes_bid || 0,
                   no_bid: marketInfo.market.no_bid || 0,
                 });
@@ -80,7 +95,7 @@ export function Portfolio() {
   }, []);
 
   if (loading) {
-    return <div style={styles.loading}>Loading positions...</div>;
+    return <LoadingSpinner size="large" />;
   }
 
   if (error) {
@@ -106,23 +121,26 @@ export function Portfolio() {
     );
   }
 
-  // Calculate total portfolio PnL
+  // Calculate total portfolio PnL by summing up individual position PnLs
   const totalPnL = positions.reduce((sum, position) => {
-    const ticker = position.market_ticker || position.ticker;
+    const ticker = position.ticker;
     const market = marketData.get(ticker);
+    const totalContracts = position.position || 0;
+    const marketExposure = position.market_exposure || 0;
     const realizedPnl = position.realized_pnl || 0;
 
-    if (!market) return sum + realizedPnl;
+    const entryPrice = totalContracts > 0 ? (marketExposure / totalContracts) : 0;
 
-    // Calculate unrealized PnL
-    const yesPos = position.yes_position || 0;
-    const noPos = position.no_position || 0;
-    const marketExposure = position.market_exposure || 0;
+    let currentValue = 0;
+    if (market && totalContracts > 0) {
+      if (entryPrice < 50) {
+        currentValue = totalContracts * market.yes_bid;
+      } else {
+        currentValue = totalContracts * market.no_bid;
+      }
+    }
 
-    // Current value = (yes_position * yes_bid) + (no_position * no_bid)
-    const currentValue = (yesPos * market.yes_bid) + (noPos * market.no_bid);
     const unrealizedPnl = currentValue - marketExposure;
-
     return sum + realizedPnl + unrealizedPnl;
   }, 0);
 
@@ -142,109 +160,89 @@ export function Portfolio() {
           </span>
         </div>
       </div>
-      <div style={styles.grid}>
-        {positions.map((position) => {
-          const ticker = position.market_ticker || position.ticker;
-          return (
-            <PositionCard
-              key={position.ticker}
-              position={position}
-              marketData={marketData.get(ticker)}
-              onClick={() => navigate(`/market/${ticker}`)}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
-function PositionCard({
-  position,
-  marketData,
-  onClick
-}: {
-  position: Position;
-  marketData?: MarketData;
-  onClick: () => void;
-}) {
-  const yesPos = position.yes_position || 0;
-  const noPos = position.no_position || 0;
-  const realizedPnl = position.realized_pnl || 0;
-  const marketExposure = position.market_exposure || 0;
+      {/* Table */}
+      <div style={styles.tableContainer}>
+        <table style={styles.table}>
+          <thead>
+            <tr style={styles.tableHeaderRow}>
+              <th style={{ ...styles.tableHeader, textAlign: 'left' }}>Market</th>
+              <th style={styles.tableHeader}>Size</th>
+              <th style={styles.tableHeader}>Entry Price</th>
+              <th style={styles.tableHeader}>Current Price</th>
+              <th style={styles.tableHeader}>P&L</th>
+            </tr>
+          </thead>
+          <tbody>
+            {positions.map((position) => {
+              const ticker = position.ticker;
+              const market = marketData.get(ticker);
+              const totalContracts = position.position || 0;
+              const marketExposure = position.market_exposure || 0;
+              const realizedPnl = position.realized_pnl || 0;
 
-  // Calculate unrealized PnL
-  let unrealizedPnl = 0;
-  if (marketData) {
-    const currentValue = (yesPos * marketData.yes_bid) + (noPos * marketData.no_bid);
-    unrealizedPnl = currentValue - marketExposure;
-  }
+              // Calculate entry price (average cost per contract)
+              const entryPrice = totalContracts > 0 ? (marketExposure / totalContracts) : 0;
 
-  const totalPnl = realizedPnl + unrealizedPnl;
+              // Determine current price and PnL
+              // Since we don't know if it's YES or NO from the API, we need to infer it
+              // If entry price < 50, likely YES position, else NO position
+              let currentPrice = 0;
+              let currentValue = 0;
 
-  const ticker = position.market_ticker || position.ticker;
+              if (market && totalContracts > 0) {
+                // Assume if you paid less than 50¢ per contract, you bought YES
+                // Otherwise you bought NO
+                if (entryPrice < 50) {
+                  currentPrice = market.yes_bid;
+                  currentValue = totalContracts * market.yes_bid;
+                } else {
+                  currentPrice = market.no_bid;
+                  currentValue = totalContracts * market.no_bid;
+                }
+              }
 
-  const totalContracts = position.position || 0;
+              // Calculate PnL
+              // Unrealized PnL = Current Value - Market Exposure
+              const unrealizedPnl = currentValue - marketExposure;
+              const totalPnl = realizedPnl + unrealizedPnl;
 
-  return (
-    <div style={styles.card} onClick={onClick}>
-      <div style={styles.cardHeader}>
-        <div style={styles.marketInfo}>
-          <span style={styles.ticker}>{ticker}</span>
-          <h3 style={styles.marketTitle}>
-            {marketData?.title || ticker}
-          </h3>
-          <span style={styles.contractCount}>{totalContracts} contract{totalContracts !== 1 ? 's' : ''}</span>
-        </div>
-        <span
-          style={{
-            ...styles.pnlBadge,
-            background: totalPnl >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-            color: totalPnl >= 0 ? '#10b981' : '#ef4444'
-          }}
-        >
-          {totalPnl >= 0 ? '+' : ''}${(totalPnl / 100).toFixed(2)}
-        </span>
-      </div>
-
-      <div style={styles.positions}>
-        {yesPos > 0 && (
-          <div style={styles.positionItem}>
-            <span style={styles.positionLabel}>YES Position</span>
-            <span style={{ ...styles.positionValue, color: '#10b981' }}>{yesPos} contracts</span>
-          </div>
-        )}
-        {noPos > 0 && (
-          <div style={styles.positionItem}>
-            <span style={styles.positionLabel}>NO Position</span>
-            <span style={{ ...styles.positionValue, color: '#ef4444' }}>{noPos} contracts</span>
-          </div>
-        )}
-      </div>
-
-      <div style={styles.cardFooter}>
-        <div style={styles.stat}>
-          <span style={styles.statLabel}>Realized</span>
-          <span
-            style={{
-              ...styles.statValue,
-              color: realizedPnl >= 0 ? '#10b981' : '#ef4444'
-            }}
-          >
-            ${(realizedPnl / 100).toFixed(2)}
-          </span>
-        </div>
-        <div style={styles.stat}>
-          <span style={styles.statLabel}>Unrealized</span>
-          <span
-            style={{
-              ...styles.statValue,
-              color: unrealizedPnl >= 0 ? '#10b981' : '#ef4444'
-            }}
-          >
-            ${(unrealizedPnl / 100).toFixed(2)}
-          </span>
-        </div>
+              return (
+                <tr
+                  key={position.ticker}
+                  style={styles.tableRow}
+                  onClick={() => navigate(`/market/${ticker}`)}
+                >
+                  <td style={{ ...styles.tableCell, textAlign: 'left' }}>
+                    <div style={styles.marketCell}>
+                      <span style={styles.tableTicker}>{ticker}</span>
+                      <span style={styles.tableMarketTitle}>{market?.title || ticker}</span>
+                    </div>
+                  </td>
+                  <td style={styles.tableCell}>
+                    <span style={styles.sizeCell}>{totalContracts}</span>
+                  </td>
+                  <td style={styles.tableCell}>
+                    <span style={styles.priceCell}>{entryPrice.toFixed(1)}¢</span>
+                  </td>
+                  <td style={styles.tableCell}>
+                    <span style={styles.priceCell}>{currentPrice.toFixed(1)}¢</span>
+                  </td>
+                  <td style={styles.tableCell}>
+                    <span
+                      style={{
+                        ...styles.pnlCell,
+                        color: totalPnl >= 0 ? '#10b981' : '#ef4444'
+                      }}
+                    >
+                      {totalPnl >= 0 ? '+' : ''}${(totalPnl / 100).toFixed(2)}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -331,98 +329,70 @@ const styles = {
     fontSize: '1.875rem',
     fontWeight: '700',
   },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-    gap: '1.5rem',
-  },
-  card: {
+  tableContainer: {
     background: '#13141a',
     border: '1px solid #1c1f26',
-    borderRadius: '16px',
-    padding: '1.5rem',
-    cursor: 'pointer',
-    transition: 'transform 0.2s, border-color 0.2s',
+    borderRadius: '12px',
+    overflow: 'hidden',
   },
-  cardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '1rem',
-    paddingBottom: '0.75rem',
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse' as const,
+  },
+  tableHeaderRow: {
+    background: '#0d0e12',
     borderBottom: '1px solid #1c1f26',
-    gap: '0.75rem',
   },
-  marketInfo: {
+  tableHeader: {
+    padding: '1rem 1.5rem',
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    textAlign: 'center' as const,
+  },
+  tableRow: {
+    borderBottom: '1px solid #1c1f26',
+    cursor: 'pointer',
+    transition: 'background 0.2s',
+  },
+  tableCell: {
+    padding: '1.25rem 1.5rem',
+    fontSize: '0.9375rem',
+    color: '#f9fafb',
+    textAlign: 'center' as const,
+  },
+  marketCell: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.5rem',
-    flex: 1,
+    gap: '0.375rem',
   },
-  ticker: {
+  tableTicker: {
     fontSize: '0.6875rem',
     fontWeight: '700',
     color: '#6b7280',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.05em',
   },
-  marketTitle: {
+  tableMarketTitle: {
     fontSize: '0.9375rem',
-    fontWeight: '600',
-    color: '#fff',
-    margin: 0,
+    fontWeight: '500',
+    color: '#f9fafb',
     lineHeight: '1.4',
   },
-  contractCount: {
-    fontSize: '0.8125rem',
-    fontWeight: '500',
-    color: '#9ca3af',
-  },
-  pnlBadge: {
-    fontSize: '0.875rem',
-    fontWeight: '700',
-    padding: '0.375rem 0.75rem',
-    borderRadius: '8px',
-  },
-  positions: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.75rem',
-    marginBottom: '1rem',
-  },
-  positionItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  positionLabel: {
-    fontSize: '0.875rem',
-    color: '#9ca3af',
-    fontWeight: '500',
-  },
-  positionValue: {
+  sizeCell: {
     fontSize: '1rem',
-    fontWeight: '700',
-  },
-  cardFooter: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    paddingTop: '0.75rem',
-    borderTop: '1px solid #1c1f26',
-  },
-  stat: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.25rem',
-  },
-  statLabel: {
-    fontSize: '0.75rem',
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  statValue: {
-    fontSize: '0.875rem',
+    fontWeight: '600',
     color: '#f9fafb',
+  },
+  priceCell: {
+    fontSize: '0.9375rem',
+    fontWeight: '500',
+    color: '#9ca3af',
+  },
+  pnlCell: {
+    fontSize: '1rem',
     fontWeight: '700',
   },
 };

@@ -5,6 +5,7 @@ import { parseUnits, formatUnits } from 'viem';
 import { getMarket, type Market } from '../services/kalshi';
 import { BALANCE_VAULT_ADDRESS, BALANCE_VAULT_ABI } from '../config/contracts';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { LoadingSpinner } from './LoadingSpinner';
 
 interface Candlestick {
   close_time: string;
@@ -24,6 +25,7 @@ export function MarketDetail() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'yes' | 'no'>('yes');
   const [amount, setAmount] = useState('');
+  const [position, setPosition] = useState<any>(null);
   const [orderStatus, setOrderStatus] = useState<{
     loading: boolean;
     success: boolean;
@@ -49,25 +51,51 @@ export function MarketDetail() {
       if (!ticker) return;
 
       setLoading(true);
+      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
       // Fetch market data
       const marketData = await getMarket(ticker);
+
+      // Fetch event data to get complete title
+      if (marketData && marketData.eventTicker) {
+        try {
+          const eventResponse = await fetch(`${API_BASE}/events/${marketData.eventTicker}`);
+          if (eventResponse.ok) {
+            const eventData = await eventResponse.json();
+            marketData.title = eventData.event.title || marketData.title;
+          }
+        } catch (error) {
+          console.error('Error fetching event:', error);
+        }
+      }
+
       setMarket(marketData);
+
+      // Fetch position data for this market
+      try {
+        const positionsResponse = await fetch(`${API_BASE}/positions?ticker=${ticker}`);
+        if (positionsResponse.ok) {
+          const positionsData = await positionsResponse.json();
+          if (positionsData.positions && positionsData.positions.length > 0) {
+            setPosition(positionsData.positions[0]);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching position:', error);
+      }
 
       // Fetch candlestick data
       try {
-        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
         const response = await fetch(`${API_BASE}/markets/${ticker}/candlesticks`);
         if (response.ok) {
           const data = await response.json();
-          console.log("DATA: ", data.candlesticks)
           // Transform candlestick data to match chart expectations
           const transformedData = (data.candlesticks || []).map((candle: any) => ({
             close_time: candle.end_period_ts * 1000, // Convert to milliseconds
-            close_price: candle.yes_bid?.close || 0,
-            open_price: candle.yes_bid?.open || 0,
-            high_price: candle.yes_bid?.high || 0,
-            low_price: candle.yes_bid?.low || 0,
+            close_price: parseFloat(candle.yes_bid?.close_dollars || '0') * 100,
+            open_price: parseFloat(candle.yes_bid?.open_dollars || '0') * 100,
+            high_price: parseFloat(candle.yes_bid?.high_dollars || '0') * 100,
+            low_price: parseFloat(candle.yes_bid?.low_dollars || '0') * 100,
             volume: candle.volume || 0,
           }));
           setCandlesticks(transformedData);
@@ -157,7 +185,7 @@ export function MarketDetail() {
   };
 
   if (loading) {
-    return <div style={styles.loading}>Loading market...</div>;
+    return <LoadingSpinner size="large" />;
   }
 
   if (!market) {
@@ -183,42 +211,61 @@ export function MarketDetail() {
         <div style={styles.leftPanel}>
           <div style={styles.chartContainer}>
             {candlesticks.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={candlesticks} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <XAxis
-                    dataKey="close_time"
-                    stroke="#6b7280"
-                    tick={{ fill: '#6b7280', fontSize: 11 }}
-                    tickFormatter={(time) => {
-                      const date = new Date(time);
-                      return `${date.getMonth() + 1}/${date.getDate()}`;
-                    }}
-                  />
-                  <YAxis
-                    stroke="#6b7280"
-                    tick={{ fill: '#6b7280', fontSize: 11 }}
-                    domain={[0, 100]}
-                    tickFormatter={(value) => `${value}¢`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#13141a',
-                      border: '1px solid #1c1f26',
-                      borderRadius: '8px',
-                      color: '#fff'
-                    }}
-                    labelFormatter={(time) => new Date(time).toLocaleString()}
-                    formatter={(value: number) => [`${value}¢`, 'Price']}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="close_price"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <>
+                <div style={styles.chartHeader}>
+                  <span style={styles.currentPrice}>
+                    {(candlesticks[candlesticks.length - 1]?.close_price || 0).toFixed(1)}% chance
+                  </span>
+                </div>
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={candlesticks} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                    <XAxis
+                      dataKey="close_time"
+                      stroke="#6b7280"
+                      tick={{ fill: '#6b7280', fontSize: 11 }}
+                      tickFormatter={(time) => {
+                        const date = new Date(time);
+                        return `${date.getMonth() + 1}/${date.getDate()}`;
+                      }}
+                    />
+                    <YAxis
+                      stroke="#6b7280"
+                      tick={{ fill: '#6b7280', fontSize: 11 }}
+                      domain={(() => {
+                        const prices = candlesticks.map(c => c.close_price);
+                        const min = Math.min(...prices);
+                        const max = Math.max(...prices);
+                        const range = max - min;
+
+                        // If range is small, zoom in
+                        if (range < 10) {
+                          const padding = Math.max(5, range * 0.5);
+                          return [Math.max(0, min - padding), Math.min(100, max + padding)];
+                        }
+                        return [0, 100];
+                      })()}
+                      tickFormatter={(value) => `${value.toFixed(1)}¢`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#13141a',
+                        border: '1px solid #1c1f26',
+                        borderRadius: '8px',
+                        color: '#fff'
+                      }}
+                      labelFormatter={(time) => new Date(time).toLocaleString()}
+                      formatter={(value: number) => [`${value.toFixed(1)}¢`, 'Price']}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="close_price"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '300px' }}>
                 <p style={styles.chartText}>Loading chart...</p>
@@ -229,7 +276,12 @@ export function MarketDetail() {
           <div style={styles.marketInfo}>
             <div style={styles.infoItem}>
               <span style={styles.infoLabel}>Volume</span>
-              <span style={styles.infoValue}>${(market.volume / 1000).toFixed(0)}K</span>
+              <span style={styles.infoValue}>
+                {market.volume >= 1000000
+                  ? `$${(market.volume / 1000000).toFixed(1)}M`
+                  : `$${(market.volume / 1000).toFixed(0)}K`
+                }
+              </span>
             </div>
             <div style={styles.infoItem}>
               <span style={styles.infoLabel}>Closes</span>
@@ -238,6 +290,58 @@ export function MarketDetail() {
               </span>
             </div>
           </div>
+
+          {/* Position Display */}
+          {position && (
+            <div style={styles.positionCard}>
+              <h3 style={styles.positionTitle}>Your Position</h3>
+              <div style={styles.positionGrid}>
+                <div style={styles.positionItem}>
+                  <span style={styles.positionLabel}>Size</span>
+                  <span style={styles.positionValue}>{position.position || 0}</span>
+                </div>
+                <div style={styles.positionItem}>
+                  <span style={styles.positionLabel}>Entry Price</span>
+                  <span style={styles.positionValue}>
+                    {position.position > 0
+                      ? ((position.market_exposure || 0) / position.position).toFixed(1) + '¢'
+                      : '—'
+                    }
+                  </span>
+                </div>
+                <div style={styles.positionItem}>
+                  <span style={styles.positionLabel}>Current Price</span>
+                  <span style={styles.positionValue}>
+                    {(() => {
+                      const entryPrice = position.position > 0 ? (position.market_exposure || 0) / position.position : 0;
+                      return entryPrice < 50 ? `${market.yesPrice}¢` : `${market.noPrice}¢`;
+                    })()}
+                  </span>
+                </div>
+                <div style={styles.positionItem}>
+                  <span style={styles.positionLabel}>P&L</span>
+                  <span style={{
+                    ...styles.positionValue,
+                    color: (() => {
+                      const entryPrice = position.position > 0 ? (position.market_exposure || 0) / position.position : 0;
+                      const currentPrice = entryPrice < 50 ? market.yesPrice : market.noPrice;
+                      const currentValue = position.position * currentPrice;
+                      const pnl = currentValue - (position.market_exposure || 0);
+                      return pnl >= 0 ? '#10b981' : '#ef4444';
+                    })()
+                  }}>
+                    {(() => {
+                      const entryPrice = position.position > 0 ? (position.market_exposure || 0) / position.position : 0;
+                      const currentPrice = entryPrice < 50 ? market.yesPrice : market.noPrice;
+                      const currentValue = position.position * currentPrice;
+                      const pnl = currentValue - (position.market_exposure || 0);
+                      return `${pnl >= 0 ? '+' : ''}$${(pnl / 100).toFixed(2)}`;
+                    })()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right side - Trading interface */}
@@ -371,7 +475,7 @@ const styles = {
   content: {
     display: 'grid',
     gridTemplateColumns: '1fr 380px',
-    gap: '3rem',
+    gap: '1rem',
     alignItems: 'stretch',
   },
   leftPanel: {
@@ -379,6 +483,7 @@ const styles = {
     flexDirection: 'column' as const,
     gap: '1.5rem',
     height: '100%',
+    alignItems: 'stretch',
   },
   header: {
     display: 'flex',
@@ -415,11 +520,6 @@ const styles = {
     gap: '0.25rem',
     marginTop: '0.25rem',
   },
-  currentPrice: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.125rem',
-  },
   priceLabel: {
     fontSize: '0.6875rem',
     color: '#6b7280',
@@ -437,9 +537,17 @@ const styles = {
     borderRadius: '12px',
     padding: '1.5rem',
     textAlign: 'center' as const,
-    flex: '1',
     height: '350px',
-    width: '100%',
+  },
+  chartHeader: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginBottom: '0.5rem',
+  },
+  currentPrice: {
+    fontSize: '1.5rem',
+    fontWeight: '700',
+    color: '#3b82f6',
   },
   chartText: {
     color: '#4b5563',
@@ -456,7 +564,7 @@ const styles = {
     background: 'rgba(19, 20, 26, 0.8)',
     border: '1px solid #1c1f26',
     borderRadius: '12px',
-    padding: '1.25rem 1.25rem',
+    padding: '1.5rem',
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.5rem',
@@ -641,5 +749,39 @@ const styles = {
     fontSize: '0.875rem',
     fontWeight: '600',
     textAlign: 'center' as const,
+  },
+  positionCard: {
+    background: 'rgba(59, 130, 246, 0.05)',
+    border: '1px solid rgba(59, 130, 246, 0.2)',
+    borderRadius: '12px',
+    padding: '1.5rem',
+  },
+  positionTitle: {
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    color: '#9ca3af',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    margin: '0 0 1rem 0',
+  },
+  positionGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '1rem',
+  },
+  positionItem: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.375rem',
+  },
+  positionLabel: {
+    fontSize: '0.75rem',
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  positionValue: {
+    fontSize: '1.125rem',
+    color: '#f9fafb',
+    fontWeight: '700',
   },
 };

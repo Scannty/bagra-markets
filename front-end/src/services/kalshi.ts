@@ -2,6 +2,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export interface Market {
   ticker: string;
+  eventTicker: string;
   title: string;
   yesPrice: number;
   noPrice: number;
@@ -43,6 +44,7 @@ export async function getMarkets(params?: {
 
     return markets.map((market: any) => ({
       ticker: market.ticker || '',
+      eventTicker: market.event_ticker || '',
       title: market.title || '',
       yesPrice: market.yes_bid || 0,
       noPrice: market.no_bid || 0,
@@ -71,6 +73,7 @@ export async function getMarket(ticker: string): Promise<Market | null> {
 
     return {
       ticker: market.ticker || '',
+      eventTicker: market.event_ticker || '',
       title: market.title || '',
       yesPrice: market.yes_bid || 0,
       noPrice: market.no_bid || 0,

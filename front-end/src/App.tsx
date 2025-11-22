@@ -5,6 +5,7 @@ import { WalletConnect } from './components/WalletConnect'
 import { Deposit } from './components/Deposit'
 import { Markets } from './components/Markets'
 import { MarketDetail } from './components/MarketDetail'
+import { EventDetail } from './components/EventDetail'
 import { Portfolio } from './components/Portfolio'
 
 type Tab = 'markets' | 'deposit' | 'portfolio'
@@ -81,6 +82,7 @@ function App() {
               <Markets />
             </>
           } />
+          <Route path="/event/:eventTicker" element={<EventDetail />} />
           <Route path="/market/:ticker" element={<MarketDetail />} />
           <Route path="/deposit" element={
             <>
