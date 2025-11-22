@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react';
 import { useAccount, useConnect, useDisconnect, useReadContract, useSwitchChain, useChainId } from 'wagmi';
 import { formatUnits } from 'viem';
 import { arbitrum } from 'wagmi/chains';
@@ -9,6 +10,8 @@ export function WalletConnect() {
   const { disconnect } = useDisconnect();
   const { switchChain } = useSwitchChain();
   const chainId = useChainId();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Read platform balance from BalanceVault
   const { data: vaultBalance } = useReadContract({
@@ -17,6 +20,18 @@ export function WalletConnect() {
     functionName: 'balances',
     args: address ? [address] : undefined,
   });
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   if (isConnected && address) {
     // Check if user is on wrong network
@@ -32,9 +47,6 @@ export function WalletConnect() {
           >
             Switch to Arbitrum
           </button>
-          <button onClick={() => disconnect()} style={styles.disconnectButton}>
-            Disconnect
-          </button>
         </div>
       );
     }
@@ -42,17 +54,31 @@ export function WalletConnect() {
     return (
       <div style={styles.container}>
         <div style={styles.balanceBox}>
-          <span style={styles.balanceLabel}>Balance</span>
           <span style={styles.balanceValue}>
             {vaultBalance ? formatUnits(vaultBalance as bigint, 6) : '0.00'} USDC
           </span>
         </div>
-        <span style={styles.address}>
-          {address.slice(0, 6)}...{address.slice(-4)}
-        </span>
-        <button onClick={() => disconnect()} style={styles.disconnectButton}>
-          Disconnect
-        </button>
+        <div style={styles.addressContainer} ref={dropdownRef}>
+          <button
+            style={styles.addressButton}
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          >
+            {address.slice(0, 6)}...{address.slice(-4)}
+          </button>
+          {isDropdownOpen && (
+            <div style={styles.dropdown}>
+              <button
+                style={styles.dropdownItem}
+                onClick={() => {
+                  disconnect();
+                  setIsDropdownOpen(false);
+                }}
+              >
+                Disconnect
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -80,10 +106,10 @@ const styles = {
   },
   balanceBox: {
     display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'flex-end',
+    flexDirection: 'row' as const,
+    alignItems: 'center',
     gap: '0.125rem',
-    padding: '0.5rem 1rem',
+    padding: '0.6rem 1rem',
     background: '#0d0e12',
     border: '1px solid #1c1f26',
     borderRadius: '10px',

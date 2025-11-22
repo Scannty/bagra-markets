@@ -180,4 +180,42 @@ export class KalshiService {
     const { data } = await this.marketsApi.getMarketOrderbook(ticker, depth);
     return data.orderbook;
   }
+
+  /**
+   * Get market candlesticks for charting
+   */
+  async getCandlesticks(marketTicker: string, params: {
+    eventTicker?: string;
+    startTs: number;
+    endTs: number;
+    periodInterval: number;
+  }) {
+    // First get the market to find its event_ticker
+    const market = await this.getMarket(marketTicker);
+    if (!market) {
+      throw new Error(`Market ${marketTicker} not found`);
+    }
+
+    const eventTicker = params?.eventTicker || market.event_ticker;
+    if (!eventTicker) {
+      throw new Error(`Event ticker not found for market ${marketTicker}`);
+    }
+
+    console.log('KalshiService.getCandlesticks called with:', {
+      eventTicker,
+      marketTicker,
+      startTs: params.startTs,
+      endTs: params.endTs,
+      periodInterval: params.periodInterval
+    });
+
+    const { data } = await this.marketsApi.getMarketCandlesticks(
+      eventTicker,
+      marketTicker,
+      params.startTs as any,
+      params.endTs as any,
+      params.periodInterval as any
+    );
+    return data.candlesticks;
+  }
 }

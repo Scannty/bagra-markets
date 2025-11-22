@@ -14,7 +14,7 @@ export function Markets() {
         setLoading(true);
         setError(null);
         const data = await getMarkets({
-          limit: 20,
+          limit: 100,
           status: 'open',
         });
         setMarkets(data);

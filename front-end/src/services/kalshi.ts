@@ -44,8 +44,8 @@ export async function getMarkets(params?: {
     return markets.map((market: any) => ({
       ticker: market.ticker || '',
       title: market.title || '',
-      yesPrice: market.yes_bid ? Math.round(market.yes_bid * 100) : 0,
-      noPrice: market.no_bid ? Math.round(market.no_bid * 100) : 0,
+      yesPrice: market.yes_bid || 0,
+      noPrice: market.no_bid || 0,
       volume: market.volume || 0,
       closeTime: market.close_time || '',
     }));
@@ -72,8 +72,8 @@ export async function getMarket(ticker: string): Promise<Market | null> {
     return {
       ticker: market.ticker || '',
       title: market.title || '',
-      yesPrice: market.yes_bid ? Math.round(market.yes_bid * 100) : 0,
-      noPrice: market.no_bid ? Math.round(market.no_bid * 100) : 0,
+      yesPrice: market.yes_bid || 0,
+      noPrice: market.no_bid || 0,
       volume: market.volume || 0,
       closeTime: market.close_time || '',
     };

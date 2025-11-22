@@ -5,6 +5,7 @@ import { WalletConnect } from './components/WalletConnect'
 import { Deposit } from './components/Deposit'
 import { Markets } from './components/Markets'
 import { MarketDetail } from './components/MarketDetail'
+import { Portfolio } from './components/Portfolio'
 
 type Tab = 'markets' | 'deposit' | 'portfolio'
 
@@ -91,10 +92,13 @@ function App() {
             </>
           } />
           <Route path="/portfolio" element={
-            <div style={styles.hero}>
-              <h1 style={styles.title}>Portfolio</h1>
-              <p style={styles.subtitle}>Coming soon</p>
-            </div>
+            <>
+              <div style={styles.hero}>
+                <h1 style={styles.title}>Your Portfolio</h1>
+                <p style={styles.subtitle}>Track your positions and performance</p>
+              </div>
+              <Portfolio />
+            </>
           } />
         </Routes>
       </main>

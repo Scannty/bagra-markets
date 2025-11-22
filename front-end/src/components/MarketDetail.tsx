@@ -4,15 +4,37 @@ import { useAccount, useWriteContract, useReadContract } from 'wagmi';
 import { parseUnits, formatUnits } from 'viem';
 import { getMarket, type Market } from '../services/kalshi';
 import { BALANCE_VAULT_ADDRESS, BALANCE_VAULT_ABI } from '../config/contracts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+
+interface Candlestick {
+  close_time: string;
+  close_price: number;
+  open_price: number;
+  high_price: number;
+  low_price: number;
+  volume: number;
+}
 
 export function MarketDetail() {
   const { ticker } = useParams<{ ticker: string }>();
   const navigate = useNavigate();
   const { address, isConnected } = useAccount();
   const [market, setMarket] = useState<Market | null>(null);
+  const [candlesticks, setCandlesticks] = useState<Candlestick[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'yes' | 'no'>('yes');
   const [amount, setAmount] = useState('');
+  const [orderStatus, setOrderStatus] = useState<{
+    loading: boolean;
+    success: boolean;
+    error: string | null;
+    orderId: string | null;
+  }>({
+    loading: false,
+    success: false,
+    error: null,
+    orderId: null,
+  });
 
   // Read platform balance
   const { data: vaultBalance } = useReadContract({
@@ -23,31 +45,115 @@ export function MarketDetail() {
   });
 
   useEffect(() => {
-    async function fetchMarket() {
+    async function fetchData() {
       if (!ticker) return;
 
       setLoading(true);
-      const data = await getMarket(ticker);
-      setMarket(data);
+
+      // Fetch market data
+      const marketData = await getMarket(ticker);
+      setMarket(marketData);
+
+      // Fetch candlestick data
+      try {
+        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+        const response = await fetch(`${API_BASE}/markets/${ticker}/candlesticks`);
+        if (response.ok) {
+          const data = await response.json();
+          console.log("DATA: ", data.candlesticks)
+          // Transform candlestick data to match chart expectations
+          const transformedData = (data.candlesticks || []).map((candle: any) => ({
+            close_time: candle.end_period_ts * 1000, // Convert to milliseconds
+            close_price: candle.yes_bid?.close || 0,
+            open_price: candle.yes_bid?.open || 0,
+            high_price: candle.yes_bid?.high || 0,
+            low_price: candle.yes_bid?.low || 0,
+            volume: candle.volume || 0,
+          }));
+          setCandlesticks(transformedData);
+        }
+      } catch (error) {
+        console.error('Error fetching candlesticks:', error);
+      }
+
       setLoading(false);
     }
 
-    fetchMarket();
+    fetchData();
   }, [ticker]);
 
-  const handleTrade = () => {
+  const handleTrade = async () => {
     if (!isConnected) {
-      alert('Please connect your wallet');
+      setOrderStatus({
+        loading: false,
+        success: false,
+        error: 'Please connect your wallet',
+        orderId: null,
+      });
       return;
     }
 
     if (!amount || parseFloat(amount) <= 0) {
-      alert('Please enter a valid amount');
+      setOrderStatus({
+        loading: false,
+        success: false,
+        error: 'Please enter a valid amount',
+        orderId: null,
+      });
       return;
     }
 
-    // TODO: Implement trading logic
-    console.log('Trading:', { ticker, side: activeTab, amount });
+    if (!ticker) return;
+
+    setOrderStatus({ loading: true, success: false, error: null, orderId: null });
+
+    try {
+      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+      const response = await fetch(`${API_BASE}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ticker,
+          action: 'buy',
+          side: activeTab,
+          count: parseInt(amount),
+          type: 'market',
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.details || error.error || 'Failed to place order');
+      }
+
+      const data = await response.json();
+      console.log('Order placed:', data.order);
+
+      setOrderStatus({
+        loading: false,
+        success: true,
+        error: null,
+        orderId: data.order.order_id,
+      });
+
+      setAmount('');
+
+      // Clear success message after 5 seconds
+      setTimeout(() => {
+        setOrderStatus({ loading: false, success: false, error: null, orderId: null });
+      }, 5000);
+    } catch (error: any) {
+      console.error('Error placing order:', error);
+      setOrderStatus({
+        loading: false,
+        success: false,
+        error: error.message,
+        orderId: null,
+      });
+    }
   };
 
   if (loading) {
@@ -75,8 +181,49 @@ export function MarketDetail() {
       <div style={styles.content}>
         {/* Left side - chart and info */}
         <div style={styles.leftPanel}>
-          <div style={styles.chartPlaceholder}>
-            <p style={styles.chartText}>Price chart coming soon</p>
+          <div style={styles.chartContainer}>
+            {candlesticks.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={candlesticks} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <XAxis
+                    dataKey="close_time"
+                    stroke="#6b7280"
+                    tick={{ fill: '#6b7280', fontSize: 11 }}
+                    tickFormatter={(time) => {
+                      const date = new Date(time);
+                      return `${date.getMonth() + 1}/${date.getDate()}`;
+                    }}
+                  />
+                  <YAxis
+                    stroke="#6b7280"
+                    tick={{ fill: '#6b7280', fontSize: 11 }}
+                    domain={[0, 100]}
+                    tickFormatter={(value) => `${value}¢`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#13141a',
+                      border: '1px solid #1c1f26',
+                      borderRadius: '8px',
+                      color: '#fff'
+                    }}
+                    labelFormatter={(time) => new Date(time).toLocaleString()}
+                    formatter={(value: number) => [`${value}¢`, 'Price']}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="close_price"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '300px' }}>
+                <p style={styles.chartText}>Loading chart...</p>
+              </div>
+            )}
           </div>
 
           <div style={styles.marketInfo}>
@@ -161,14 +308,26 @@ export function MarketDetail() {
                 </div>
                 <button
                   onClick={handleTrade}
-                  disabled={!amount || parseFloat(amount) <= 0}
+                  disabled={!amount || parseFloat(amount) <= 0 || orderStatus.loading}
                   style={{
                     ...styles.tradeButton,
-                    ...(!amount || parseFloat(amount) <= 0 ? styles.tradeButtonDisabled : {})
+                    ...(!amount || parseFloat(amount) <= 0 || orderStatus.loading ? styles.tradeButtonDisabled : {})
                   }}
                 >
-                  Place Order
+                  {orderStatus.loading ? 'Placing Order...' : 'Place Order'}
                 </button>
+
+                {orderStatus.success && (
+                  <div style={styles.successMessage}>
+                    ✓ Order placed successfully! ID: {orderStatus.orderId}
+                  </div>
+                )}
+
+                {orderStatus.error && (
+                  <div style={styles.errorMessage}>
+                    ✕ {orderStatus.error}
+                  </div>
+                )}
               </>
             ) : (
               <div style={styles.connectPrompt}>
@@ -200,6 +359,8 @@ const styles = {
     marginBottom: '1.5rem',
     transition: 'color 0.2s',
     fontWeight: '500',
+    display: 'block',
+    textAlign: 'left' as const,
   },
   loading: {
     textAlign: 'center' as const,
@@ -224,6 +385,8 @@ const styles = {
     flexDirection: 'column' as const,
     gap: '0.75rem',
     marginBottom: '1.5rem',
+    alignItems: 'center',
+    textAlign: 'center' as const,
   },
   tickerBadge: {
     display: 'inline-block',
@@ -244,6 +407,7 @@ const styles = {
     color: '#fff',
     margin: 0,
     lineHeight: '1.2',
+    textAlign: 'center' as const,
   },
   priceSection: {
     display: 'flex',
@@ -267,17 +431,15 @@ const styles = {
     color: '#10b981',
     lineHeight: '1',
   },
-  chartPlaceholder: {
+  chartContainer: {
     background: 'rgba(19, 20, 26, 0.5)',
     border: '1px solid #1c1f26',
     borderRadius: '12px',
-    padding: '4rem 2rem',
+    padding: '1.5rem',
     textAlign: 'center' as const,
     flex: '1',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '200px',
+    height: '350px',
+    width: '100%',
   },
   chartText: {
     color: '#4b5563',
@@ -457,5 +619,27 @@ const styles = {
     color: '#6b7280',
     fontSize: '0.9375rem',
     margin: 0,
+  },
+  successMessage: {
+    marginTop: '1rem',
+    padding: '0.875rem 1rem',
+    background: 'rgba(16, 185, 129, 0.1)',
+    border: '1px solid rgba(16, 185, 129, 0.3)',
+    borderRadius: '10px',
+    color: '#10b981',
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    textAlign: 'center' as const,
+  },
+  errorMessage: {
+    marginTop: '1rem',
+    padding: '0.875rem 1rem',
+    background: 'rgba(239, 68, 68, 0.1)',
+    border: '1px solid rgba(239, 68, 68, 0.3)',
+    borderRadius: '10px',
+    color: '#ef4444',
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    textAlign: 'center' as const,
   },
 };
