@@ -30,16 +30,16 @@ async function main() {
     throw new Error(`USDC address not configured for chain ID ${chainId}`);
   }
 
-  // Platform wallet (should be set via environment variable in production)
-  const platformWallet = process.env.PLATFORM_WALLET || deployer.address;
+  // Kalshi deposit address on Arbitrum
+  const kalshiDepositAddress = process.env.KALSHI_DEPOSIT_ADDRESS || "0xac266f88d6889e98209eba3cbc3ac42a425637d1";
 
   console.log("Chain ID:", chainId);
   console.log("USDC Address:", usdcAddress);
-  console.log("Platform Wallet:", platformWallet);
+  console.log("Kalshi Deposit Address:", kalshiDepositAddress);
 
   // Deploy BalanceVault
   const BalanceVault = await ethers.getContractFactory("BalanceVault");
-  const vault = await BalanceVault.deploy(usdcAddress, platformWallet);
+  const vault = await BalanceVault.deploy(usdcAddress, kalshiDepositAddress);
 
   await vault.waitForDeployment();
 
@@ -52,7 +52,7 @@ async function main() {
   console.log("Chain ID:", chainId);
   console.log("BalanceVault:", vaultAddress);
   console.log("USDC Token:", usdcAddress);
-  console.log("Platform Wallet:", platformWallet);
+  console.log("Kalshi Deposit Address:", kalshiDepositAddress);
   console.log("Deployer:", deployer.address);
 
   // Wait for a few block confirmations before verification
@@ -61,7 +61,7 @@ async function main() {
     await vault.deploymentTransaction()?.wait(5);
 
     console.log("\nTo verify the contract, run:");
-    console.log(`npx hardhat verify --network ${network.name} ${vaultAddress} ${usdcAddress} ${platformWallet}`);
+    console.log(`npx hardhat verify --network ${network.name} ${vaultAddress} ${usdcAddress} ${kalshiDepositAddress}`);
   }
 }
 

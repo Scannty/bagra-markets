@@ -17,8 +17,8 @@ contract BalanceVault is Ownable, ReentrancyGuard {
     // USDC token address (will be set in constructor based on chain)
     IERC20 public immutable usdcToken;
 
-    // Platform wallet that holds the actual funds for Kalshi trading
-    address public platformWallet;
+    // Kalshi deposit address on Arbitrum where USDC is forwarded
+    address public kalshiDepositAddress;
 
     // User balances (available for withdrawal)
     mapping(address => uint256) public balances;
@@ -31,47 +31,47 @@ contract BalanceVault is Ownable, ReentrancyGuard {
     event Withdrawal(address indexed user, uint256 amount, uint256 newBalance);
     event BalanceLocked(address indexed user, uint256 amount, uint256 newLockedBalance);
     event BalanceUnlocked(address indexed user, uint256 amount, uint256 newLockedBalance);
-    event PlatformWalletUpdated(address indexed oldWallet, address indexed newWallet);
+    event KalshiDepositAddressUpdated(address indexed oldAddress, address indexed newAddress);
+    event FundsForwardedToKalshi(uint256 amount);
 
-    constructor(address _usdcToken, address _platformWallet) Ownable(msg.sender) {
+    constructor(address _usdcToken, address _kalshiDepositAddress) Ownable(msg.sender) {
         require(_usdcToken != address(0), "Invalid USDC address");
-        require(_platformWallet != address(0), "Invalid platform wallet");
+        require(_kalshiDepositAddress != address(0), "Invalid Kalshi deposit address");
 
         usdcToken = IERC20(_usdcToken);
-        platformWallet = _platformWallet;
+        kalshiDepositAddress = _kalshiDepositAddress;
     }
 
     /**
-     * @notice Deposit USDC to the vault
-     * @param amount Amount of USDC to deposit (in USDC decimals, typically 6)
+     * @notice Credit user balance after backend confirms deposit
+     * @dev Only callable by owner (backend service after confirming on-chain and Kalshi deposit)
+     * @param user User address to credit
+     * @param amount Amount of USDC to credit (in USDC decimals, typically 6)
      */
-    function deposit(uint256 amount) external nonReentrant {
+    function creditDeposit(address user, uint256 amount) external onlyOwner {
+        require(user != address(0), "Invalid user address");
         require(amount > 0, "Amount must be greater than 0");
-
-        // Transfer USDC from user to platform wallet
-        usdcToken.safeTransferFrom(msg.sender, platformWallet, amount);
 
         // Update user balance
-        balances[msg.sender] += amount;
+        balances[user] += amount;
 
-        emit Deposit(msg.sender, amount, balances[msg.sender]);
+        emit Deposit(user, amount, balances[user]);
     }
 
     /**
-     * @notice Withdraw available USDC from the vault
+     * @notice Process withdrawal for a user
+     * @dev Only callable by owner (backend service after processing off-chain withdrawal)
+     * @param user User address to withdraw for
      * @param amount Amount of USDC to withdraw
      */
-    function withdraw(uint256 amount) external nonReentrant {
+    function processWithdrawal(address user, uint256 amount) external onlyOwner nonReentrant {
         require(amount > 0, "Amount must be greater than 0");
-        require(balances[msg.sender] >= amount, "Insufficient balance");
+        require(balances[user] >= amount, "Insufficient balance");
 
-        // Update balance before transfer
-        balances[msg.sender] -= amount;
+        // Update balance
+        balances[user] -= amount;
 
-        // Transfer USDC from platform wallet to user
-        usdcToken.safeTransferFrom(platformWallet, msg.sender, amount);
-
-        emit Withdrawal(msg.sender, amount, balances[msg.sender]);
+        emit Withdrawal(user, amount, balances[user]);
     }
 
     /**
@@ -112,14 +112,14 @@ contract BalanceVault is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Update platform wallet address
+     * @notice Update Kalshi deposit address
      * @dev Only callable by owner
-     * @param newPlatformWallet New platform wallet address
+     * @param newKalshiDepositAddress New Kalshi deposit address
      */
-    function updatePlatformWallet(address newPlatformWallet) external onlyOwner {
-        require(newPlatformWallet != address(0), "Invalid platform wallet");
-        address oldWallet = platformWallet;
-        platformWallet = newPlatformWallet;
-        emit PlatformWalletUpdated(oldWallet, newPlatformWallet);
+    function updateKalshiDepositAddress(address newKalshiDepositAddress) external onlyOwner {
+        require(newKalshiDepositAddress != address(0), "Invalid Kalshi deposit address");
+        address oldAddress = kalshiDepositAddress;
+        kalshiDepositAddress = newKalshiDepositAddress;
+        emit KalshiDepositAddressUpdated(oldAddress, newKalshiDepositAddress);
     }
 }
