@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { ChainIndexer } from './chain-indexer';
 import { KalshiService } from './kalshi-service';
+import { initializeApiServer } from './api-server';
 // Import ABI from compiled contract
 // After compiling contracts, copy the ABI here or import from:
 // import BalanceVaultArtifact from '../../bagra-contracts/artifacts/contracts/BalanceVault.sol/BalanceVault.json';
@@ -57,6 +58,10 @@ async function main() {
   });
 
   console.log('Kalshi service initialized\n');
+
+  // Initialize API server
+  initializeApiServer(kalshiService);
+  console.log('API server initialized\n');
 
   // Initialize Chain Indexer
   const chainIndexer = new ChainIndexer({
