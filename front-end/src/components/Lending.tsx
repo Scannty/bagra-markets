@@ -5,6 +5,24 @@ import { parseUnits } from 'viem';
 // Manager Contract Configuration
 const MANAGER_CONTRACT_ADDRESS = '0x77228687f63AAfDb8A0ccB20be14fa632AB6f107' as const;
 
+// Share Token Addresses (Zircuit Mainnet)
+const YES_SHARE_ADDRESS = '0x9aDFc08C17e95D8F0BD8BC34fdF6f811A45DD79f' as const;
+const NO_SHARE_ADDRESS = '0xC9fCa476132D4DbAEB18EA165D3Cb8Fc673a138a' as const;
+
+// ERC20 ABI for approve function
+const ERC20_ABI = [
+  {
+    type: 'function',
+    name: 'approve',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' }
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'nonpayable',
+  },
+] as const;
+
 // Manager Contract ABI
 const MANAGER_ABI = [
   {
@@ -87,50 +105,48 @@ export function Lending() {
   const [activePool, setActivePool] = useState<LendingPool | null>(null);
   const [action, setAction] = useState<'supply' | 'borrow'>('supply');
   const [amount, setAmount] = useState('');
-  const [txStep, setTxStep] = useState<'idle' | 'pending' | 'success'>('idle');
+  const [txStep, setTxStep] = useState<'idle' | 'approving' | 'supplying' | 'borrowing' | 'success'>('idle');
 
   const { address } = useAccount();
 
-  // Hook for supply/borrow transactions
-  const {
-    data: txHash,
-    writeContract,
-    isPending,
-  } = useWriteContract();
+  const { writeContractAsync } = useWriteContract();
 
-  // Wait for transaction confirmation
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
-    hash: txHash,
-  });
+  const handleSupplyCollateral = async () => {
+    if (!amount || parseFloat(amount) <= 0 || !address || !activePool) return;
 
-  // Handle transaction success
-  useEffect(() => {
-    if (isSuccess && txStep === 'pending') {
+    try {
+      const amountInWei = parseUnits(amount, 18);
+
+      // Determine which token to approve based on pool side
+      const tokenAddress = activePool.side === 'YES' ? YES_SHARE_ADDRESS : NO_SHARE_ADDRESS;
+
+      // Step 1: Approve the token transfer
+      setTxStep('approving');
+      await writeContractAsync({
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [MANAGER_CONTRACT_ADDRESS, amountInWei],
+      });
+
+      // Step 2: Supply collateral
+      setTxStep('supplying');
+      await writeContractAsync({
+        address: MANAGER_CONTRACT_ADDRESS,
+        abi: MANAGER_ABI,
+        functionName: 'supplyCollateral',
+        args: [amountInWei],
+      });
+
+      // Success
       setTxStep('success');
       setTimeout(() => {
         setTxStep('idle');
         setAmount('');
         setActivePool(null);
       }, 2000);
-    }
-  }, [isSuccess, txStep]);
-
-  const handleSupplyCollateral = async () => {
-    if (!amount || parseFloat(amount) <= 0 || !address) return;
-
-    setTxStep('pending');
-
-    try {
-      const amountInWei = parseUnits(amount, 18);
-
-      writeContract({
-        address: MANAGER_CONTRACT_ADDRESS,
-        abi: MANAGER_ABI,
-        functionName: 'supplyCollateral',
-        args: [amountInWei],
-      });
     } catch (error) {
-      console.error('Supply collateral failed:', error);
+      console.error('Transaction failed:', error);
       setTxStep('idle');
     }
   };
@@ -138,17 +154,24 @@ export function Lending() {
   const handleBorrow = async () => {
     if (!amount || parseFloat(amount) <= 0 || !address) return;
 
-    setTxStep('pending');
-
     try {
+      setTxStep('borrowing');
       const amountInWei = parseUnits(amount, 18);
 
-      writeContract({
+      await writeContractAsync({
         address: MANAGER_CONTRACT_ADDRESS,
         abi: MANAGER_ABI,
         functionName: 'borrow',
         args: [amountInWei],
       });
+
+      // Success
+      setTxStep('success');
+      setTimeout(() => {
+        setTxStep('idle');
+        setAmount('');
+        setActivePool(null);
+      }, 2000);
     } catch (error) {
       console.error('Borrow failed:', error);
       setTxStep('idle');
@@ -164,21 +187,26 @@ export function Lending() {
   };
 
   const getButtonText = () => {
-    if (txStep === 'pending' || isPending || isConfirming) {
-      return action === 'supply' ? 'Supplying...' : 'Borrowing...';
+    if (txStep === 'approving') {
+      return 'Approving...';
+    }
+    if (txStep === 'supplying') {
+      return 'Supplying...';
+    }
+    if (txStep === 'borrowing') {
+      return 'Borrowing...';
     }
     if (txStep === 'success') {
       return 'Success!';
     }
-    return `${action === 'supply' ? 'Supply' : 'Borrow'} ${amount || '0'} contracts`;
+    return `${action === 'supply' ? 'Supply' : 'Borrow'} ${amount || '0'} ${action === 'supply' ? 'contracts' : 'USDC'}`;
   };
 
   const isButtonDisabled =
     !amount ||
     parseFloat(amount) <= 0 ||
     !address ||
-    isPending ||
-    isConfirming;
+    txStep !== 'idle';
 
   return (
     <div style={styles.container}>

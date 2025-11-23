@@ -147,7 +147,7 @@ const styles = {
     position: 'relative' as const,
   },
   addressButton: {
-    padding: '0.5rem 1rem',
+    padding: '0.75rem 1rem',
     background: 'rgba(255, 255, 255, 0.05)',
     border: '1px solid rgba(255, 255, 255, 0.15)',
     borderRadius: '8px',

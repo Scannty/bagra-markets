@@ -91,13 +91,13 @@ export function DepositModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
               <div>
                 <p style={styles.label}>Wallet USDC Balance:</p>
                 <p style={styles.value}>
-                  {usdcBalance ? formatUnits(usdcBalance as bigint, 6) : '0.00'} USDC
+                  {usdcBalance ? parseFloat(formatUnits(usdcBalance as bigint, 6)).toFixed(2) : '0.00'} USDC
                 </p>
               </div>
               <div>
                 <p style={styles.label}>Platform Balance:</p>
                 <p style={styles.value}>
-                  {vaultBalance ? formatUnits(vaultBalance as bigint, 6) : '0.00'} USDC
+                  {vaultBalance ? parseFloat(formatUnits(vaultBalance as bigint, 6)).toFixed(2) : '0.00'} USDC
                 </p>
               </div>
             </div>
@@ -168,9 +168,10 @@ const styles = {
   },
   header: {
     display: 'flex',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: '1.5rem',
+    position: 'relative' as const,
   },
   title: {
     fontSize: '1.5rem',
@@ -191,6 +192,8 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'absolute' as const,
+    right: 0,
   },
   connectMessage: {
     color: '#9ca3af',
@@ -226,7 +229,7 @@ const styles = {
     marginBottom: '1.5rem',
   },
   input: {
-    width: '100%',
+    width: 'calc(100% - 2rem)',
     padding: '1rem',
     fontSize: '1.125rem',
     background: '#0d0e12',
@@ -236,6 +239,7 @@ const styles = {
     marginTop: '0.5rem',
     outline: 'none',
     transition: 'border-color 0.2s',
+    boxSizing: 'border-box' as const,
   },
   button: {
     width: '100%',

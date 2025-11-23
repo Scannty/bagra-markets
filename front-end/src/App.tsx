@@ -8,6 +8,7 @@ import { MarketDetail } from "./components/MarketDetail";
 import { EventDetail } from "./components/EventDetail";
 import { Portfolio } from "./components/Portfolio";
 import { Lending } from "./components/Lending";
+import logo from "./assets/logo.png";
 
 type Tab = "markets" | "lending" | "portfolio";
 
@@ -36,7 +37,10 @@ function App() {
         <div style={styles.container}>
             <header style={styles.header}>
                 <div style={styles.headerContent}>
-                    <h1 style={styles.logo}>BAGRA</h1>
+                    <div style={styles.logoContainer}>
+                        <img src={logo} alt="Bagra Logo" style={styles.logoImage} />
+                        <h1 style={styles.logo}>BAGRA</h1>
+                    </div>
                     <nav style={styles.nav}>
                         <a
                             href="#"
@@ -189,6 +193,16 @@ const styles = {
         display: "flex",
         alignItems: "center",
         gap: "3rem",
+    },
+    logoContainer: {
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+    },
+    logoImage: {
+        height: "32px",
+        width: "32px",
+        objectFit: "contain" as const,
     },
     logo: {
         fontSize: "1.25rem",
