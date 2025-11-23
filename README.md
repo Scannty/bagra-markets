@@ -158,6 +158,13 @@ The app will be available at `http://localhost:5173`
 
 -   **YES Share Token**: `0xfC29748F36CE5954C2F120d59cCeFD1d75732d99`
 -   **NO Share Token**: `0x82E645cb71a590188484d7a1621AB10d1BC5B120`
+-   **Lending Contract**: `0xE0542DEfd5bfe9Ce8F5826cec39315fe4752b640`
+
+### Hedera Mainnet
+
+-   **YES Share Token**: `0x19c10B9085a2fC58D0aad752db7B2b25A2a1AE74`
+-   **NO Share Token**: `0xd65168BCF5A502cBe291699631FAE3eB1961591c`
+-   **Lending Contract**: `0xEa2700570722A7240E5C41f52aaE186Db800fAff`
 
 ## Smart Contracts
 
