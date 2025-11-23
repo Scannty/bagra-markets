@@ -7,8 +7,9 @@ import { Markets } from "./components/Markets";
 import { MarketDetail } from "./components/MarketDetail";
 import { EventDetail } from "./components/EventDetail";
 import { Portfolio } from "./components/Portfolio";
+import { Lending } from "./components/Lending";
 
-type Tab = "markets" | "portfolio";
+type Tab = "markets" | "lending" | "portfolio";
 
 function App() {
     const navigate = useNavigate();
@@ -18,6 +19,7 @@ function App() {
     // Determine active tab from URL
     const getActiveTab = (): Tab => {
         if (location.pathname.startsWith("/portfolio")) return "portfolio";
+        if (location.pathname.startsWith("/lending")) return "lending";
         return "markets";
     };
 
@@ -26,6 +28,7 @@ function App() {
     const handleTabChange = (tab: Tab) => {
         setActiveTab(tab);
         if (tab === "markets") navigate("/");
+        else if (tab === "lending") navigate("/lending");
         else if (tab === "portfolio") navigate("/portfolio");
     };
 
@@ -33,7 +36,7 @@ function App() {
         <div style={styles.container}>
             <header style={styles.header}>
                 <div style={styles.headerContent}>
-                    <h1 style={styles.logo}>Bagra</h1>
+                    <h1 style={styles.logo}>BAGRA</h1>
                     <nav style={styles.nav}>
                         <a
                             href="#"
@@ -45,8 +48,45 @@ function App() {
                                 e.preventDefault();
                                 handleTabChange("markets");
                             }}
+                            onMouseEnter={(e) => {
+                                if (activeTab !== "markets") {
+                                    e.currentTarget.style.color = "#fff";
+                                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                if (activeTab !== "markets") {
+                                    e.currentTarget.style.color = "#9ca3af";
+                                    e.currentTarget.style.background = "transparent";
+                                }
+                            }}
                         >
                             Markets
+                        </a>
+                        <a
+                            href="#"
+                            style={{
+                                ...styles.navLink,
+                                ...(activeTab === "lending" && styles.navLinkActive),
+                            }}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleTabChange("lending");
+                            }}
+                            onMouseEnter={(e) => {
+                                if (activeTab !== "lending") {
+                                    e.currentTarget.style.color = "#fff";
+                                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                if (activeTab !== "lending") {
+                                    e.currentTarget.style.color = "#9ca3af";
+                                    e.currentTarget.style.background = "transparent";
+                                }
+                            }}
+                        >
+                            Lending
                         </a>
                         <a
                             href="#"
@@ -58,15 +98,24 @@ function App() {
                                 e.preventDefault();
                                 handleTabChange("portfolio");
                             }}
+                            onMouseEnter={(e) => {
+                                if (activeTab !== "portfolio") {
+                                    e.currentTarget.style.color = "#fff";
+                                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                if (activeTab !== "portfolio") {
+                                    e.currentTarget.style.color = "#9ca3af";
+                                    e.currentTarget.style.background = "transparent";
+                                }
+                            }}
                         >
                             Portfolio
                         </a>
                     </nav>
-                    <button onClick={() => setIsDepositModalOpen(true)} style={styles.depositButton}>
-                        Deposit
-                    </button>
                 </div>
-                <WalletConnect />
+                <WalletConnect onDepositClick={() => setIsDepositModalOpen(true)} />
             </header>
 
             <main style={styles.main}>
@@ -85,6 +134,18 @@ function App() {
                     />
                     <Route path="/event/:eventTicker" element={<EventDetail />} />
                     <Route path="/market/:ticker" element={<MarketDetail />} />
+                    <Route
+                        path="/lending"
+                        element={
+                            <>
+                                <div style={styles.hero}>
+                                    <h1 style={styles.title}>Lending Markets</h1>
+                                    <p style={styles.subtitle}>Supply or borrow prediction market positions</p>
+                                </div>
+                                <Lending />
+                            </>
+                        }
+                    />
                     <Route
                         path="/portfolio"
                         element={
@@ -115,10 +176,14 @@ const styles = {
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        padding: "1rem 2rem",
-        borderBottom: "1px solid #1c1f26",
-        background: "#13141a",
+        padding: "1rem 3rem",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+        background: "rgba(13, 14, 18, 0.95)",
+        backdropFilter: "blur(20px)",
         width: "100%",
+        position: "sticky" as const,
+        top: 0,
+        zIndex: 100,
     },
     headerContent: {
         display: "flex",
@@ -133,31 +198,25 @@ const styles = {
     },
     nav: {
         display: "flex",
-        gap: "2rem",
+        gap: "0.5rem",
+        background: "rgba(255, 255, 255, 0.03)",
+        padding: "0.375rem",
+        borderRadius: "10px",
+        border: "1px solid rgba(255, 255, 255, 0.05)",
     },
     navLink: {
         color: "#9ca3af",
         textDecoration: "none",
-        fontSize: "0.9rem",
-        fontWeight: "500",
-        transition: "color 0.2s",
+        fontSize: "0.875rem",
+        fontWeight: "600",
+        transition: "all 0.2s",
+        padding: "0.5rem 1.25rem",
+        borderRadius: "8px",
     },
     navLinkActive: {
         color: "#fff",
-        borderBottom: "2px solid #3b82f6",
-        paddingBottom: "0.25rem",
-    },
-    depositButton: {
-        padding: "0.625rem 1.5rem",
-        fontSize: "0.9rem",
-        fontWeight: "600",
-        background: "linear-gradient(135deg, #E57373 0%, #D97373 100%)",
-        color: "#fff",
-        border: "none",
-        borderRadius: "8px",
-        cursor: "pointer",
-        transition: "transform 0.2s, opacity 0.2s",
-        marginLeft: "1rem",
+        background: "rgba(229, 115, 115, 0.15)",
+        border: "1px solid rgba(229, 115, 115, 0.2)",
     },
     main: {
         maxWidth: "1200px",
