@@ -1,4 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { parseUnits } from 'viem';
+
+// Manager Contract Configuration
+const MANAGER_CONTRACT_ADDRESS = '0x77228687f63AAfDb8A0ccB20be14fa632AB6f107' as const;
+
+// Manager Contract ABI
+const MANAGER_ABI = [
+  {
+    type: 'function',
+    name: 'supplyCollateral',
+    inputs: [{ name: 'amount', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'borrow',
+    inputs: [{ name: 'amount', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'weth',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+  },
+] as const;
 
 interface LendingPool {
   marketTicker: string;
@@ -16,9 +46,9 @@ interface LendingPool {
 // Mock data for demonstration
 const mockPools: LendingPool[] = [
   {
-    marketTicker: 'PREZ-2024',
-    marketTitle: 'Will Donald Trump become President of the United States before 2045?',
-    eventTitle: 'US Presidential Election 2024',
+    marketTicker: 'KXGREENLAND-29',
+    marketTitle: 'Will Trump Buy Greenland?',
+    eventTitle: 'Will Trump Buy Greenland?',
     side: 'YES',
     totalSupply: 125000,
     totalBorrow: 87500,
@@ -28,28 +58,28 @@ const mockPools: LendingPool[] = [
     available: 37500,
   },
   {
-    marketTicker: 'PREZ-2024',
-    marketTitle: 'Will Donald Trump become President of the United States before 2045?',
-    eventTitle: 'US Presidential Election 2024',
+    marketTicker: 'KXPRESNOMD-28',
+    marketTitle: 'Democratic Presidential nominee in 2028?',
+    eventTitle: 'Democratic Presidential nominee in 2028?',
     side: 'NO',
     totalSupply: 98000,
-    totalBorrow: 58800,
-    supplyAPY: 6.2,
-    borrowAPY: 9.8,
-    utilization: 60,
-    available: 39200,
+    totalBorrow: 68600,
+    supplyAPY: 7.2,
+    borrowAPY: 11.5,
+    utilization: 70,
+    available: 29400,
   },
   {
-    marketTicker: 'SENATE-2024',
-    marketTitle: 'Will Democrats control the Senate after 2024 election?',
-    eventTitle: 'US Senate Control 2024',
+    marketTicker: 'KXPRESNOMR-28',
+    marketTitle: 'Republican nominee in 2028?',
+    eventTitle: 'Republican nominee in 2028?',
     side: 'YES',
-    totalSupply: 75000,
-    totalBorrow: 45000,
-    supplyAPY: 7.1,
-    borrowAPY: 10.5,
+    totalSupply: 82000,
+    totalBorrow: 49200,
+    supplyAPY: 6.8,
+    borrowAPY: 10.2,
     utilization: 60,
-    available: 30000,
+    available: 32800,
   },
 ];
 
@@ -57,6 +87,98 @@ export function Lending() {
   const [activePool, setActivePool] = useState<LendingPool | null>(null);
   const [action, setAction] = useState<'supply' | 'borrow'>('supply');
   const [amount, setAmount] = useState('');
+  const [txStep, setTxStep] = useState<'idle' | 'pending' | 'success'>('idle');
+
+  const { address } = useAccount();
+
+  // Hook for supply/borrow transactions
+  const {
+    data: txHash,
+    writeContract,
+    isPending,
+  } = useWriteContract();
+
+  // Wait for transaction confirmation
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
+
+  // Handle transaction success
+  useEffect(() => {
+    if (isSuccess && txStep === 'pending') {
+      setTxStep('success');
+      setTimeout(() => {
+        setTxStep('idle');
+        setAmount('');
+        setActivePool(null);
+      }, 2000);
+    }
+  }, [isSuccess, txStep]);
+
+  const handleSupplyCollateral = async () => {
+    if (!amount || parseFloat(amount) <= 0 || !address) return;
+
+    setTxStep('pending');
+
+    try {
+      const amountInWei = parseUnits(amount, 18);
+
+      writeContract({
+        address: MANAGER_CONTRACT_ADDRESS,
+        abi: MANAGER_ABI,
+        functionName: 'supplyCollateral',
+        args: [amountInWei],
+      });
+    } catch (error) {
+      console.error('Supply collateral failed:', error);
+      setTxStep('idle');
+    }
+  };
+
+  const handleBorrow = async () => {
+    if (!amount || parseFloat(amount) <= 0 || !address) return;
+
+    setTxStep('pending');
+
+    try {
+      const amountInWei = parseUnits(amount, 18);
+
+      writeContract({
+        address: MANAGER_CONTRACT_ADDRESS,
+        abi: MANAGER_ABI,
+        functionName: 'borrow',
+        args: [amountInWei],
+      });
+    } catch (error) {
+      console.error('Borrow failed:', error);
+      setTxStep('idle');
+    }
+  };
+
+  const handleSubmit = () => {
+    if (action === 'supply') {
+      handleSupplyCollateral();
+    } else {
+      handleBorrow();
+    }
+  };
+
+  const getButtonText = () => {
+    if (txStep === 'pending' || isPending || isConfirming) {
+      return action === 'supply' ? 'Supplying...' : 'Borrowing...';
+    }
+    if (txStep === 'success') {
+      return 'Success!';
+    }
+    return `${action === 'supply' ? 'Supply' : 'Borrow'} ${amount || '0'} contracts`;
+  };
+
+  const isButtonDisabled =
+    !amount ||
+    parseFloat(amount) <= 0 ||
+    !address ||
+    isPending ||
+    isConfirming;
 
   return (
     <div style={styles.container}>
@@ -221,13 +343,14 @@ export function Lending() {
             </div>
 
             <button
-              disabled={!amount || parseFloat(amount) <= 0}
+              onClick={handleSubmit}
+              disabled={isButtonDisabled}
               style={{
                 ...styles.submitButton,
-                ...(!amount || parseFloat(amount) <= 0 ? styles.submitButtonDisabled : {}),
+                ...(isButtonDisabled ? styles.submitButtonDisabled : {}),
               }}
             >
-              {action === 'supply' ? 'Supply' : 'Borrow'} {amount || '0'} contracts
+              {getButtonText()}
             </button>
 
             <div style={styles.infoBox}>
