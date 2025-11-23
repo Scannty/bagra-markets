@@ -133,45 +133,74 @@ function EventCard({ event, onClick }: { event: MarketEvent; onClick: () => void
   // For single market events, show the full title
   const displayTitle = event.markets.length === 1 ? event.markets[0].title : (event.eventTitle || event.eventTicker);
 
+  // Get image from first market
+  const imageUrl = event.markets[0]?.imageUrl;
+
   return (
-    <div style={styles.card} onClick={onClick}>
-      <div style={styles.cardHeader}>
-        <span style={styles.ticker}>{event.eventTicker}</span>
-        <span style={styles.volume}>
-          {totalVolume >= 1000000
-            ? `$${(totalVolume / 1000000).toFixed(1)}M vol`
-            : `$${(totalVolume / 1000).toFixed(0)}K vol`
-          }
-        </span>
-      </div>
-
-      <h3 style={styles.marketTitle}>{displayTitle}</h3>
-
-      {event.markets.length > 1 ? (
-        <div style={styles.multiMarketInfo}>
-          <span style={styles.marketCount}>{event.markets.length} markets in this event</span>
-        </div>
-      ) : (
-        <div style={styles.prices}>
-          <div style={styles.priceBox}>
-            <span style={styles.priceLabel}>YES</span>
-            <span style={{ ...styles.priceValue, color: '#10b981' }}>
-              {event.markets[0].yesPrice}¢
-            </span>
-          </div>
-          <div style={styles.priceBox}>
-            <span style={styles.priceLabel}>NO</span>
-            <span style={{ ...styles.priceValue, color: '#ef4444' }}>
-              {event.markets[0].noPrice}¢
-            </span>
-          </div>
+    <div
+      style={styles.card}
+      onClick={onClick}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-4px)';
+        e.currentTarget.style.borderColor = 'rgba(229, 115, 115, 0.3)';
+        e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.4)';
+        const img = e.currentTarget.querySelector('img');
+        if (img) (img as HTMLElement).style.transform = 'scale(1.05)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+        e.currentTarget.style.boxShadow = 'none';
+        const img = e.currentTarget.querySelector('img');
+        if (img) (img as HTMLElement).style.transform = 'scale(1)';
+      }}
+    >
+      {imageUrl && (
+        <div style={styles.imageContainer}>
+          <img src={imageUrl} alt={displayTitle} style={styles.image} />
+          <div style={styles.imageOverlay} />
         </div>
       )}
 
-      <div style={styles.cardFooter}>
-        <span style={styles.closeTime}>
-          Closes: {new Date(event.markets[0].closeTime).toLocaleDateString()}
-        </span>
+      <div style={styles.cardContent}>
+        <div style={styles.cardHeader}>
+          <span style={styles.ticker}>{event.eventTicker}</span>
+          <span style={styles.volume}>
+            {totalVolume >= 1000000
+              ? `$${(totalVolume / 1000000).toFixed(1)}M vol`
+              : `$${(totalVolume / 1000).toFixed(0)}K vol`
+            }
+          </span>
+        </div>
+
+        <h3 style={styles.marketTitle}>{displayTitle}</h3>
+
+        {event.markets.length > 1 ? (
+          <div style={styles.multiMarketInfo}>
+            <span style={styles.marketCount}>{event.markets.length} markets in this event</span>
+          </div>
+        ) : (
+          <div style={styles.prices}>
+            <div style={styles.priceBox}>
+              <span style={styles.priceLabel}>YES</span>
+              <span style={{ ...styles.priceValue, color: '#10b981' }}>
+                {event.markets[0].yesPrice}¢
+              </span>
+            </div>
+            <div style={styles.priceBox}>
+              <span style={styles.priceLabel}>NO</span>
+              <span style={{ ...styles.priceValue, color: '#ef4444' }}>
+                {event.markets[0].noPrice}¢
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div style={styles.cardFooter}>
+          <span style={styles.closeTime}>
+            Closes: {new Date(event.markets[0].closeTime).toLocaleDateString()}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -206,19 +235,20 @@ const styles = {
     transition: 'transform 0.2s',
   },
   title: {
-    fontSize: '1.5rem',
-    marginBottom: '1.5rem',
+    fontSize: '1.875rem',
+    marginBottom: '2rem',
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: '-0.02em',
   },
   multiMarketInfo: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '1.5rem',
-    background: '#0d0e12',
-    borderRadius: '10px',
-    border: '1px solid #1c1f26',
+    padding: '1rem',
+    background: 'rgba(229, 115, 115, 0.05)',
+    borderRadius: '8px',
+    border: '1px solid rgba(229, 115, 115, 0.15)',
     marginBottom: '1rem',
   },
   marketCount: {
@@ -228,16 +258,42 @@ const styles = {
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-    gap: '1rem',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gap: '1.25rem',
   },
   card: {
     background: '#13141a',
-    padding: '1.25rem',
-    borderRadius: '16px',
-    border: '1px solid #1c1f26',
-    transition: 'border-color 0.2s, transform 0.2s',
+    padding: '0',
+    borderRadius: '12px',
+    border: '1px solid rgba(255, 255, 255, 0.05)',
+    transition: 'all 0.3s ease',
     cursor: 'pointer',
+    overflow: 'hidden',
+    position: 'relative' as const,
+  },
+  imageContainer: {
+    width: '100%',
+    height: '200px',
+    overflow: 'hidden',
+    background: 'linear-gradient(180deg, #1a1d26 0%, #13141a 100%)',
+    position: 'relative' as const,
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
+    transition: 'transform 0.3s ease',
+  },
+  imageOverlay: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(13,14,18,0.8) 100%)',
+  },
+  cardContent: {
+    padding: '1.25rem',
   },
   cardHeader: {
     display: 'flex',
@@ -246,24 +302,27 @@ const styles = {
     marginBottom: '0.75rem',
   },
   ticker: {
-    fontSize: '0.75rem',
-    fontWeight: '600',
+    fontSize: '0.6875rem',
+    fontWeight: '700',
     color: '#6b7280',
     textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
+    letterSpacing: '0.08em',
   },
   volume: {
-    fontSize: '0.75rem',
-    color: '#4b5563',
-    fontWeight: '500',
+    fontSize: '0.6875rem',
+    fontWeight: '700',
+    color: '#E57373',
+    background: 'rgba(229, 115, 115, 0.1)',
+    padding: '0.25rem 0.5rem',
+    borderRadius: '4px',
   },
   marketTitle: {
-    fontSize: '1rem',
+    fontSize: '1.0625rem',
+    fontWeight: '600',
+    color: '#f9fafb',
     lineHeight: '1.4',
     marginBottom: '1.25rem',
     minHeight: '2.8rem',
-    color: '#f9fafb',
-    fontWeight: '500',
   },
   prices: {
     display: 'grid',
@@ -272,11 +331,11 @@ const styles = {
     marginBottom: '1rem',
   },
   priceBox: {
-    background: '#0d0e12',
+    background: 'rgba(255, 255, 255, 0.02)',
     padding: '0.875rem',
-    borderRadius: '10px',
+    borderRadius: '8px',
     textAlign: 'center' as const,
-    border: '1px solid #1c1f26',
+    border: '1px solid rgba(255, 255, 255, 0.05)',
   },
   priceLabel: {
     display: 'block',

@@ -17,8 +17,8 @@
 .spinner-ring {
   position: absolute;
   border: 3px solid transparent;
-  border-top-color: #3b82f6;
-  border-right-color: #8b5cf6;
+  border-top-color: #E57373;
+  border-right-color: #D97373;
   border-radius: 50%;
   animation: spinner-rotate 1.2s linear infinite;
   will-change: transform;
