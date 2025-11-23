@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { KalshiService } from "./kalshi-service";
+import { ChilizMinter } from "./chiliz-minter";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -9,9 +10,11 @@ app.use(cors());
 app.use(express.json());
 
 let kalshiService: KalshiService;
+let chilizMinter: ChilizMinter;
 
-export function initializeApiServer(service: KalshiService) {
+export function initializeApiServer(service: KalshiService, minter: ChilizMinter) {
     kalshiService = service;
+    chilizMinter = minter;
 
     // Get markets endpoint
     app.get("/api/markets", async (req, res) => {
@@ -140,8 +143,10 @@ export function initializeApiServer(service: KalshiService) {
 
     // Create order endpoint
     app.post("/api/orders", async (req, res) => {
+        console.log('desilo se')
         try {
             const {
+                userAddress,
                 ticker,
                 action,
                 side,
@@ -161,6 +166,13 @@ export function initializeApiServer(service: KalshiService) {
                 });
             }
 
+            // Validate userAddress for minting shares
+            if (!userAddress) {
+                return res.status(400).json({
+                    error: "Missing required field: userAddress (needed for minting shares)",
+                });
+            }
+
             // For market orders, set a high price to ensure fill
             // For yes side, use yes_price=99, for no side use no_price=99
             let finalYesPrice = yesPrice ? Number(yesPrice) : undefined;
@@ -174,6 +186,7 @@ export function initializeApiServer(service: KalshiService) {
                 }
             }
 
+            // Step 1: Create order on Kalshi
             const order = await kalshiService.createOrder({
                 ticker,
                 action,
@@ -187,7 +200,37 @@ export function initializeApiServer(service: KalshiService) {
                 buyMaxCost: buyMaxCost ? Number(buyMaxCost) : undefined,
             });
 
-            res.json({ order });
+            if (!order) {
+                throw new Error("Failed to create order: No order returned from Kalshi");
+            }
+
+            console.log("Kalshi order created successfully:", order.order_id);
+
+            // Step 2: Mint shares on Chiliz Spicy
+            let mintTxHash: string | null = null;
+            try {
+                mintTxHash = await chilizMinter.mintShares(
+                    userAddress as `0x${string}`,
+                    side,
+                    Number(count)
+                );
+                console.log("Shares minted successfully:", mintTxHash);
+            } catch (mintError: any) {
+                console.error("Error minting shares:", mintError);
+                // Return order success but with minting error
+                return res.status(200).json({
+                    order,
+                    mintTxHash: null,
+                    mintError: "Order created on Kalshi but failed to mint shares: " + mintError.message,
+                });
+            }
+
+            // Return both order and mint transaction
+            res.json({
+                order,
+                mintTxHash,
+                message: "Order created and shares minted successfully",
+            });
         } catch (error: any) {
             console.error("Error creating order:", error);
             console.error("Error response:", error.response?.data);

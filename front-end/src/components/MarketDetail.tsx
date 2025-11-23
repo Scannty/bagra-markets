@@ -149,6 +149,7 @@ export function MarketDetail() {
           side: activeTab,
           count: parseInt(amount),
           type: 'market',
+          userAddress: address,
         }),
       });
 
